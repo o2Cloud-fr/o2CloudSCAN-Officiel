@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scanner Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.5); }
+      50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.8); }
+    }
+    
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    @keyframes scan-progress {
+      0% { width: 0%; }
+      100% { width: 100%; }
+    }
+    
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    .gradient-bg {
+      background: linear-gradient(-45deg, #1f2937, #111827, #0f172a, #020617);
+      background-size: 400% 400%;
+      animation: gradient-shift 15s ease infinite;
+    }
+    
+    .glass-morphism {
+      background: rgba(31, 41, 55, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(75, 85, 99, 0.3);
+    }
+    
+    .float { animation: float 3s ease-in-out infinite; }
+    .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+    
+    .scan-progress {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .scan-progress::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    .history-item {
+      transition: all 0.3s ease;
+      border-left: 3px solid transparent;
+    }
+    
+    .history-item:hover {
+      border-left-color: #3b82f6;
+      transform: translateX(4px);
+    }
+    
+    .history-item.selected {
+      border-left-color: #10b981;
+      background-color: rgba(16, 185, 129, 0.1) !important;
+    }
+    
+    .scanner-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .scanner-online {
+      background-color: #10b981;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    }
+    
+    .scanner-offline {
+      background-color: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    }
+    
+    .tooltip {
+      position: relative;
+    }
+    
+    .tooltip::before {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+      z-index: 1000;
+    }
+    
+    .tooltip:hover::before {
+      opacity: 1;
+    }
+    
+    .file-format-icon {
+      width: 20px;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+      margin-right: 8px;
+    }
+    
+    .format-png { background: #3b82f6; color: white; }
+    .format-jpg { background: #f59e0b; color: white; }
+    .format-pdf { background: #dc2626; color: white; }
+    .format-tiff { background: #8b5cf6; color: white; }
+    .format-bmp { background: #6b7280; color: white; }
+    
+    .config-section {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      border-radius: 8px;
+      background: rgba(55, 65, 81, 0.3);
+      border: 1px solid rgba(75, 85, 99, 0.2);
+    }
+    
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+    
+    .status-ready { background-color: #10b981; }
+    .status-scanning { background-color: #f59e0b; }
+    .status-error { background-color: #ef4444; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen p-4">
+  <div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="text-center mb-8 float">
+      <h1 class="text-4xl font-bold text-blue-400 mb-2 tracking-wider">[SCANNER PRO]</h1>
+      <p class="text-gray-300 text-lg">Application de Numérisation Professionnelle</p>
+      <div class="mt-4 flex justify-center items-center space-x-4 text-sm text-gray-400">
+        <div class="flex items-center">
+          <span class="status-indicator status-ready" id="mainStatusIndicator"></span>
+          <span id="mainStatusText">Système prêt</span>
+        </div>
+        <div class="text-gray-600">•</div>
+        <div id="scannerCount">Recherche des scanners...</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Configuration Panel -->
+      <div class="glass-morphism rounded-2xl p-6">
+        <h2 class="text-xl font-bold text-blue-300 mb-6 flex items-center">
+          <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+          [CONFIG] Configuration du Scan
+        </h2>
+        
+        <div class="space-y-6">
+          <!-- Sélection du scanner -->
+          <div class="config-section">
+            <label class="block text-white mb-3 font-semibold flex items-center">
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+              </svg>
+              [DEVICE] Scanner:
+            </label>
+            <div class="flex gap-2">
+              <select id="scannerSelect" class="flex-1 bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-opacity-20 transition-all">
+                <option value="">Chargement des scanners...</option>
+              </select>
+              <button 
+                id="refreshScannersBtn" 
+                class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 transform hover:scale-105 tooltip"
+                data-tooltip="Actualiser la liste des scanners"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Nom du fichier et format -->
+          <div class="config-section">
+            <div class="grid grid-cols-3 gap-4">
+              <div class="col-span-2">
+                <label class="block text-white mb-3 font-semibold flex items-center">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                  [FILE] Nom du fichier:
+                </label>
+                <input 
+                  type="text" 
+                  id="fileName" 
+                  class="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-opacity-20 transition-all"
+                  placeholder="Scan_20250616_120000"
+                >
+              </div>
+              <div>
+                <label class="block text-white mb-3 font-semibold flex items-center">
+                  <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                  </svg>
+                  [EXT] Format:
+                </label>
+                <select id="extension" class="w-full bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-opacity-20 transition-all">
+                  <option value=".png">📷 .png</option>
+                  <option value=".jpg">🖼️ .jpg</option>
+                  <option value=".pdf">📄 .pdf</option>
+                  <option value=".tiff">🖨️ .tiff</option>
+                  <option value=".bmp">🎨 .bmp</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Chemin de destination -->
+          <div class="config-section">
+            <label class="block text-white mb-3 font-semibold flex items-center">
+              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+              </svg>
+              [PATH] Chemin de destination:
+            </label>
+            <div class="flex gap-2">
+              <input 
+                type="text" 
+                id="outputPath" 
+                class="flex-1 bg-gray-700 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400 focus:ring-opacity-20 transition-all"
+                readonly
+              >
+              <button 
+                id="browseBtn" 
+                class="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 transform hover:scale-105 tooltip"
+                data-tooltip="Parcourir les dossiers"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Progress Bar (hidden by default) -->
+          <div id="scanProgress" class="hidden">
+            <div class="bg-gray-700 rounded-full h-3 overflow-hidden">
+              <div class="bg-gradient-to-r from-green-500 to-blue-500 h-full rounded-full scan-progress" style="width: 0%" id="progressBar"></div>
+            </div>
+            <p class="text-center text-sm text-gray-300 mt-2" id="progressText">Préparation du scan...</p>
+          </div>
+          
+          <!-- Bouton de scan -->
+          <button 
+            id="scanBtn" 
+            class="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold py-4 px-6 rounded-lg text-lg transition-all duration-300 transform hover:scale-105 pulse-glow flex items-center justify-center"
+          >
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            [START] DÉMARRER LA NUMÉRISATION
+          </button>
+        </div>
+      </div>
+
+      <!-- History Panel -->
+      <div class="glass-morphism rounded-2xl p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold text-blue-300 flex items-center">
+            <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            [HISTORY] Historique des Scans
+          </h2>
+          <button 
+            id="refreshBtn" 
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 transform hover:scale-105 text-sm tooltip"
+            data-tooltip="Actualiser l'historique"
+          >
+            <svg class="w-4 h-4 mr-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            [REFRESH]
+          </button>
+        </div>
+        
+        <div class="bg-gray-800 rounded-lg p-4 max-h-80 overflow-y-auto border border-gray-700">
+          <div id="historyList" class="space-y-2">
+            <!-- Historique sera inséré ici -->
+          </div>
+        </div>
+        
+        <div class="flex gap-2 mt-4">
+          <button 
+            id="openBtn" 
+            class="flex-1 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-all duration-200 transform hover:scale-105 text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center"
+            disabled
+          >
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+            [OPEN] Ouvrir
+          </button>
+          <button 
+            id="deleteBtn" 
+            class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 transform hover:scale-105 text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center"
+            disabled
+          >
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+            [DEL] Supprimer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Panel -->
+    <div class="glass-morphism rounded-2xl p-6 mt-6">
+      <h2 class="text-xl font-bold text-blue-300 mb-4 flex items-center">
+        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        [INFO] Informations du Système
+      </h2>
+      <div 
+        id="infoBox" 
+        class="bg-gray-800 rounded-lg p-4 text-white font-mono text-sm whitespace-pre-line max-h-40 overflow-y-auto border border-gray-700 leading-relaxed"
+      >
+[OK] Application prête à numériser
+[TIP] Astuce: Sélectionnez un scanner dans la liste déroulante pour une numérisation directe
+[INFO] Formats supportés: PNG, JPG, PDF, TIFF, BMP
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="mt-6 text-center">
+      <div class="glass-morphism rounded-full px-6 py-3 inline-flex items-center space-x-4">
+        <span class="status-indicator status-ready" id="statusIndicator"></span>
+        <span id="statusLabel" class="text-gray-300 text-sm font-medium">Prêt à scanner</span>
+        <div class="text-gray-600">•</div>
+        <span id="lastScanTime" class="text-gray-400 text-xs">Aucun scan récent</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let selectedHistoryItem = null;
+    let availableScanners = [];
+    let isScanning = false;
+
+    // Générer un nom de fichier par défaut
+    function generateFileName() {
+      const now = new Date();
+      const timestamp = now.toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '_');
+      return `Scan_${timestamp}`;
+    }
+
+    // Formater la taille de fichier
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+      return Math.round(bytes / (1024 * 1024)) + ' MB';
+    }
+
+    // Formater la date
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    // Obtenir l'icône de format
+    function getFormatIcon(extension) {
+      const ext = extension.toLowerCase();
+      switch(ext) {
+        case '.png': return '📷';
+        case '.jpg': case '.jpeg': return '🖼️';
+        case '.pdf': return '📄';
+        case '.tiff': return '🖨️';
+        case '.bmp': return '🎨';
+        default: return '📄';
+      }
+    }
+
+    // Mettre à jour les indicateurs de statut
+    function updateStatus(status, message, lastScan = null) {
+      const statusIndicator = document.getElementById('statusIndicator');
+      const mainStatusIndicator = document.getElementById('mainStatusIndicator');
+      const statusLabel = document.getElementById('statusLabel');
+      const mainStatusText = document.getElementById('mainStatusText');
+      const lastScanTime = document.getElementById('lastScanTime');
+      
+      // Retirer toutes les classes de statut
+      statusIndicator.className = 'status-indicator';
+      mainStatusIndicator.className = 'status-indicator';
+      
+      // Ajouter la nouvelle classe de statut
+      statusIndicator.classList.add(`status-${status}`);
+      mainStatusIndicator.classList.add(`status-${status}`);
+      
+      statusLabel.textContent = message;
+      mainStatusText.textContent = message;
+      
+      if (lastScan) {
+        lastScanTime.textContent = `Dernier scan: ${formatDate(lastScan)}`;
+      }
+    }
+
+    // Simuler la progression du scan
+    function simulateScanProgress() {
+      const progressContainer = document.getElementById('scanProgress');
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      
+      progressContainer.classList.remove('hidden');
+      let progress = 0;
+      
+      const steps = [
+        { progress: 10, text: 'Initialisation du scanner...' },
+        { progress: 30, text: 'Préparation de la numérisation...' },
+        { progress: 60, text: 'Numérisation en cours...' },
+        { progress: 85, text: 'Traitement de l\'image...' },
+        { progress: 100, text: 'Finalisation...' }
+      ];
+      
+      let stepIndex = 0;
+      const interval = setInterval(() => {
+        if (stepIndex < steps.length) {
+          const step = steps[stepIndex];
+          progressBar.style.width = step.progress + '%';
+          progressText.textContent = step.text;
+          stepIndex++;
+        } else {
+          clearInterval(interval);
+          setTimeout(() => {
+            progressContainer.classList.add('hidden');
+          }, 1000);
+        }
+      }, 800);
+    }
+
+    // Charger la liste des scanners
+    async function loadScanners() {
+      const scannerSelect = document.getElementById('scannerSelect');
+      const infoBox = document.getElementById('infoBox');
+      const scannerCount = document.getElementById('scannerCount');
+      
+      try {
+        scannerSelect.innerHTML = '<option value="">Recherche des scanners...</option>';
+        updateStatus('scanning', 'Recherche des scanners...');
+        scannerCount.textContent = 'Recherche en cours...';
+        
+        const result = await window.electronAPI.getScanners();
+        
+        if (result.error) {
+          scannerSelect.innerHTML = '<option value="">Erreur lors du chargement</option>';
+          infoBox.textContent = `[ERROR] ${result.error}\n[TIP] Vérifiez que vos scanners sont connectés et allumés\n[INFO] Redémarrez l'application si le problème persiste`;
+          updateStatus('error', 'Erreur lors du chargement des scanners');
+          scannerCount.textContent = 'Erreur de détection';
+          return;
+        }
+        
+        availableScanners = result;
+        
+        if (availableScanners.length === 0) {
+          scannerSelect.innerHTML = '<option value="">Aucun scanner trouvé</option>';
+          infoBox.textContent = '[WARNING] Aucun scanner détecté\n[TIP] Vérifiez que vos scanners sont connectés et allumés\n[INFO] Certains scanners nécessitent l\'installation de pilotes spécifiques';
+          updateStatus('error', 'Aucun scanner détecté');
+          scannerCount.textContent = 'Aucun scanner';
+        } else {
+          scannerSelect.innerHTML = '<option value="">Laisser l\'utilisateur choisir</option>';
+          
+          availableScanners.forEach(scanner => {
+            const option = document.createElement('option');
+            option.value = scanner.DeviceID;
+            option.textContent = `${scanner.Name} (${scanner.Manufacturer})`;
+            scannerSelect.appendChild(option);
+          });
+          
+infoBox.textContent = `[OK] ${availableScanners.length} scanner(s) détecté(s)\n[TIP] Sélectionnez un scanner ou laissez vide pour choisir manuellement\n[INFO] Tous les scanners sont prêts à l'utilisation`;
+          updateStatus('ready', 'Système prêt à scanner');
+          scannerCount.textContent = `${availableScanners.length} scanner(s) disponible(s)`;
+        }
+      } catch (error) {
+        scannerSelect.innerHTML = '<option value="">Erreur de connexion</option>';
+        infoBox.textContent = `[ERROR] Erreur de connexion: ${error.message}\n[TIP] Vérifiez votre connexion réseau\n[INFO] Redémarrez l'application si nécessaire`;
+        updateStatus('error', 'Erreur de connexion');
+        scannerCount.textContent = 'Erreur de connexion';
+      }
+    }
+
+    // Charger l'historique des scans
+    async function loadHistory() {
+      const historyList = document.getElementById('historyList');
+      
+      try {
+        const history = await window.electronAPI.loadHistory();
+        
+        if (history.length === 0) {
+          historyList.innerHTML = `
+            <div class="text-center text-gray-400 py-8">
+              <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              <p class="text-sm">[EMPTY] Aucun scan enregistré</p>
+              <p class="text-xs text-gray-500 mt-1">Les scans apparaîtront ici après numérisation</p>
+            </div>
+          `;
+        } else {
+          historyList.innerHTML = history.map(item => `
+            <div class="history-item bg-gray-700 p-3 rounded-lg cursor-pointer" data-path="${item.filePath}">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center flex-1 min-w-0">
+                  <div class="file-format-icon format-${path.extname(item.fileName).slice(1)}">${getFormatIcon(path.extname(item.fileName))}</div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-white text-sm font-medium truncate">${item.fileName}</div>
+                    <div class="text-gray-400 text-xs">${formatDate(item.scanDate)} • ${formatFileSize(item.fileSize)}</div>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500 ml-2 truncate max-w-24" title="${item.scanner}">
+                  ${item.scanner}
+                </div>
+              </div>
+            </div>
+          `).join('');
+          
+          // Ajouter les gestionnaires d'événements pour les éléments d'historique
+          document.querySelectorAll('.history-item').forEach(item => {
+            item.addEventListener('click', () => {
+              // Retirer la sélection précédente
+              document.querySelectorAll('.history-item').forEach(i => i.classList.remove('selected'));
+              
+              // Sélectionner l'élément cliqué
+              item.classList.add('selected');
+              selectedHistoryItem = item.dataset.path;
+              
+              // Activer les boutons
+              document.getElementById('openBtn').disabled = false;
+              document.getElementById('deleteBtn').disabled = false;
+            });
+          });
+        }
+      } catch (error) {
+        historyList.innerHTML = `
+          <div class="text-center text-red-400 py-8">
+            <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5l-6.928-12c-.77-.833-2.694-.833-3.464 0L.165 16.5C-.605 17.333.357 19 1.896 19z"></path>
+            </svg>
+            <p class="text-sm">[ERROR] Erreur de chargement</p>
+            <p class="text-xs mt-1">Impossible de charger l'historique</p>
+          </div>
+        `;
+      }
+    }
+
+    // Initialisation de l'application
+    async function initializeApp() {
+      // Générer un nom de fichier par défaut
+      document.getElementById('fileName').value = generateFileName();
+      
+      // Charger le chemin par défaut
+      try {
+        const defaultPath = await window.electronAPI.getDefaultPath();
+        document.getElementById('outputPath').value = defaultPath;
+      } catch (error) {
+        document.getElementById('outputPath').value = 'C:\\Users\\Documents\\Scans';
+      }
+      
+      // Charger les scanners et l'historique
+      await loadScanners();
+      await loadHistory();
+    }
+
+    // Gestionnaires d'événements
+    document.getElementById('refreshScannersBtn').addEventListener('click', loadScanners);
+    document.getElementById('refreshBtn').addEventListener('click', loadHistory);
+
+    document.getElementById('browseBtn').addEventListener('click', async () => {
+      try {
+        const selectedPath = await window.electronAPI.selectFolder();
+        if (selectedPath) {
+          document.getElementById('outputPath').value = selectedPath;
+        }
+      } catch (error) {
+        document.getElementById('infoBox').textContent = `[ERROR] Erreur lors de la sélection du dossier: ${error.message}`;
+      }
+    });
+
+    document.getElementById('scanBtn').addEventListener('click', async () => {
+      if (isScanning) return;
+      
+      const fileName = document.getElementById('fileName').value.trim();
+      const extension = document.getElementById('extension').value;
+      const outputDir = document.getElementById('outputPath').value.trim();
+      const selectedScannerId = document.getElementById('scannerSelect').value;
+      const selectedScannerName = document.getElementById('scannerSelect').selectedOptions[0]?.textContent || '';
+      
+      if (!fileName) {
+        document.getElementById('infoBox').textContent = '[ERROR] Veuillez saisir un nom de fichier';
+        return;
+      }
+      
+      if (!outputDir) {
+        document.getElementById('infoBox').textContent = '[ERROR] Veuillez sélectionner un dossier de destination';
+        return;
+      }
+      
+      isScanning = true;
+      document.getElementById('scanBtn').disabled = true;
+      updateStatus('scanning', 'Numérisation en cours...');
+      
+      try {
+        simulateScanProgress();
+        
+        const result = await window.electronAPI.startScan({
+          fileName,
+          extension,
+          outputDir,
+          scannerId: selectedScannerId || null,
+          scannerName: selectedScannerName
+        });
+        
+        if (result.success) {
+          document.getElementById('infoBox').textContent = `[SUCCESS] Scan terminé avec succès!\n[FILE] ${result.path}\n[TIP] Le fichier a été ajouté à l'historique`;
+          updateStatus('ready', 'Scan terminé avec succès', new Date().toISOString());
+          
+          // Générer un nouveau nom de fichier
+          document.getElementById('fileName').value = generateFileName();
+          
+          // Recharger l'historique
+          await loadHistory();
+        } else {
+          document.getElementById('infoBox').textContent = `[ERROR] Échec du scan: ${result.error}\n[TIP] Vérifiez que le scanner est connecté et allumé`;
+          updateStatus('error', 'Échec du scan');
+        }
+      } catch (error) {
+        document.getElementById('infoBox').textContent = `[ERROR] Erreur lors du scan: ${error.message}\n[TIP] Redémarrez l'application si le problème persiste`;
+        updateStatus('error', 'Erreur lors du scan');
+      } finally {
+        isScanning = false;
+        document.getElementById('scanBtn').disabled = false;
+      }
+    });
+
+    document.getElementById('openBtn').addEventListener('click', async () => {
+      if (selectedHistoryItem) {
+        try {
+          const success = await window.electronAPI.openFile(selectedHistoryItem);
+          if (!success) {
+            document.getElementById('infoBox').textContent = '[ERROR] Impossible d\'ouvrir le fichier\n[TIP] Le fichier a peut-être été déplacé ou supprimé';
+          }
+        } catch (error) {
+          document.getElementById('infoBox').textContent = `[ERROR] Erreur lors de l'ouverture: ${error.message}`;
+        }
+      }
+    });
+
+    document.getElementById('deleteBtn').addEventListener('click', async () => {
+      if (selectedHistoryItem && confirm('Êtes-vous sûr de vouloir supprimer cet élément de l\'historique ?')) {
+        try {
+          await window.electronAPI.deleteHistoryItem(selectedHistoryItem);
+          selectedHistoryItem = null;
+          
+          // Désactiver les boutons
+          document.getElementById('openBtn').disabled = true;
+          document.getElementById('deleteBtn').disabled = true;
+          
+          // Recharger l'historique
+          await loadHistory();
+          
+          document.getElementById('infoBox').textContent = '[SUCCESS] Élément supprimé de l\'historique\n[INFO] Le fichier physique n\'a pas été supprimé';
+        } catch (error) {
+          document.getElementById('infoBox').textContent = `[ERROR] Erreur lors de la suppression: ${error.message}`;
+        }
+      }
+    });
+
+    // Initialiser l'application au chargement de la page
+    document.addEventListener('DOMContentLoaded', initializeApp);
+  </script>
+</body>
+</html>
